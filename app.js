@@ -1,12 +1,14 @@
+/* eslint-disable no-empty */
+/* eslint-disable no-console */
+/* eslint-disable no-undef */
 //jshint esversion:6
 require('dotenv').config();
 const express    = require('express');
 const app        = express();
 const bodyParser = require('body-parser');
 const mongoose   = require('mongoose');
-const md5        = require('md5');
-
-const key = process.env.SECRET;
+const bcrypt     = require('bcryptjs');
+const salt       = bcrypt.genSaltSync(10);
 
 app.use(bodyParser.urlencoded({extended: true}));
 app.set('view engine', 'ejs');
@@ -45,7 +47,8 @@ app.get("/register", (req, res) => {
 app.post("/register", (req, res) => {
 
     const email = req.body.username;
-    const password = md5(req.body.password);
+    const hash = bcrypt.hashSync(req.body.password, salt);
+    const password = hash;
 
     const newUser = new User ({email,password});
 
@@ -68,7 +71,8 @@ app.post("/register", (req, res) => {
 app.post("/login", (req, res) => {
 
     const email = req.body.username;
-    const password = md5(req.body.password);
+    const password = req.body.password;
+    const hash = bcrypt.hashSync(password, salt);
 
     User.findOne({email}, (err, userFound) => {
 
@@ -80,9 +84,13 @@ app.post("/login", (req, res) => {
 
             if (userFound) {
 
-                if (userFound.password === password) {
+                if (bcrypt.compareSync(password, hash)) {
 
                     res.render("secrets");
+                    
+                } else {
+
+                    res.send("Oooopsss....wrong password ASSHOLE! :)");
                 }
             }
         }
