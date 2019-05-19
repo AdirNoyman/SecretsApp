@@ -3,29 +3,49 @@
 /* eslint-disable no-undef */
 //jshint esversion:6
 require('dotenv').config();
-const express    = require('express');
-const app        = express();
-const bodyParser = require('body-parser');
-const mongoose   = require('mongoose');
-const bcrypt     = require('bcryptjs');
-const salt       = bcrypt.genSaltSync(10);
+const express               = require('express');
+const app                   = express();
+const bodyParser            = require('body-parser');
+const mongoose              = require('mongoose');
+const ejs                   = require('ejs');
+const session               = require('express-session');
+const passport              = require('passport');
+const passportLocalMongoose = require('passport-local-mongoose');
 
 app.use(bodyParser.urlencoded({extended: true}));
 app.set('view engine', 'ejs');
 app.use(express.static("public"));
+app.use(session({
+    secret: 'The Monkey called the Donkey.',
+    resave: false,
+    saveUninitialized: false
+    // cookie: { secure: true }
+  }));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
 
 // Connect to mongoDB ******************************************
 mongoose.connect("mongodb://localhost:27017/userDB", {useNewUrlParser: true});
+mongoose.set('useCreateIndex', true);
 
 // Create mongoose USER schema ******************************************************
 const userSchema = new mongoose.Schema ({
-    email: {type: String, required: "WTF??? ...where is the email???....ASSHOLE!!!"},
-    password: {type: String, required: "WTF??? ...where is the password???....ASSHOLE!!!"}
+    email: {type: String},
+    password: {type: String}
   });
+
+  userSchema.plugin(passportLocalMongoose);
 
   // Create mongoose USER model ******************************************************
 
-  const User = mongoose.model("User", userSchema);
+const User = mongoose.model("User", userSchema);
+
+passport.use(User.createStrategy());
+ 
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 // Routes ******************************************************
 
@@ -44,58 +64,78 @@ app.get("/register", (req, res) => {
     res.render("register");
 });
 
+app.get("/secrets", (req, res) => {
+
+    if (req.isAuthenticated()) {
+
+        res.render("secrets");
+    } else {
+
+        res.redirect("/login");
+    }
+});
+
+app.get("/logout", (req, res) => {
+
+    req.logOut();
+    res.redirect("/");
+});
+
+
+
 app.post("/register", (req, res) => {
 
-    const email = req.body.username;
-    const hash = bcrypt.hashSync(req.body.password, salt);
-    const password = hash;
 
-    const newUser = new User ({email,password});
+    User.register({username:req.body.username}, req.body.password, function(err, user) {
 
-    newUser.save( err => {
 
-        if (!err) {
-
-            res.render("secrets");
-
+        if (err) {
+            
+            console.log(err);
+            res.redirect("/register");
+        
         } else {
 
-            res.send(err);
+            passport.authenticate("local") (req,res, function() {
+
+                res.redirect("/secrets");
+            });
         }
+            });
+        });
+       
+    //     const authenticate = User.authenticate();
+    //     authenticate('username', 'password', function(err, result) {
+    //       if (err) { ... }
+       
+    //       // Value 'result' is set to false. The user could not be authenticated since the user is not active
+    //     });
+    //   });
 
-
-    });
-
-});
 
 app.post("/login", (req, res) => {
 
-    const email = req.body.username;
-    const password = req.body.password;
-    const hash = bcrypt.hashSync(password, salt);
+    const user = new User({
 
-    User.findOne({email}, (err, userFound) => {
-
-        if (err) {
-
-            console.log(err);
-
-        } else {
-
-            if (userFound) {
-
-                if (bcrypt.compareSync(password, hash)) {
-
-                    res.render("secrets");
-                    
-                } else {
-
-                    res.send("Oooopsss....wrong password ASSHOLE! :)");
-                }
-            }
-        }
+        username: req.body.username,
+        password: req.body.password
 
     });
+    
+    req.login(user, (err) => {
+        if (err) {
+            
+            console.log(err);
+         } else {
+
+            passport.authenticate("local") (req,res, function() {
+
+                res.redirect("/secrets");
+            });
+         }
+       
+      });
+
 
 });
 // Server listen on port 3000 *************************************
